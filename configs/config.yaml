@@ -1,0 +1,19 @@
+data:
+  image_size: 128
+  voxel_size: 32
+  batch_size: 4
+  num_workers: 2
+  class_id: "03001627"
+
+model:
+  latent_dim: 512
+
+training:
+  epochs: 20
+  lr: 0.0001
+  device: "cuda"
+
+paths:
+  rendering_dir: "C:/Shivansh/Ds/shapenet/src/data/ShapeNetRendering/ShapeNetRendering"
+  voxel_dir: "C:/Shivansh/Ds/shapenet/src/data/ShapeNetVox32"
+  output_dir: "./outputs"

@@ -1,0 +1,9 @@
+venv_shapenet/
+__pycache__/
+*.pyc
+outputs/
+*.pth
+.ipynb_checkpoints/
+src/data/ShapeNetRendering/
+src/data/ShapeNetVox32/
+src/data/ShapeNetRendering.tgz

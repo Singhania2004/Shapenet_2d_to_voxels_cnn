@@ -1,0 +1,11 @@
+ipykernel
+numpy
+matplotlib
+tqdm
+pyyaml
+open3d
+trimesh
+scikit-image
+torch 
+torchvision 
+--extra-index-url https://download.pytorch.org/whl/cu130    
