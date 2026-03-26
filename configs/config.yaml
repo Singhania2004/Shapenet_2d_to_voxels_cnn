@@ -14,6 +14,6 @@ training:
   device: "cuda"
 
 paths:
-  rendering_dir: "C:/Shivansh/Ds/shapenet/src/data/ShapeNetRendering/ShapeNetRendering"
-  voxel_dir: "C:/Shivansh/Ds/shapenet/src/data/ShapeNetVox32"
+  rendering_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetRendering/ShapeNetRendering"
+  voxel_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetVox32"
   output_dir: "./outputs"

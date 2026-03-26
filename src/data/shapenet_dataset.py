@@ -2,6 +2,7 @@ import os
 import random
 import torch
 import numpy as np
+import random
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
@@ -10,7 +11,8 @@ from src.utils import binvox_rw
 
 
 class ShapeNetDataset(Dataset):
-    def __init__(self, config):
+    def __init__(self, config, split="train"):
+        self.split = split
         self.rendering_path = config["paths"]["rendering_dir"]
         self.voxel_path = config["paths"]["voxel_dir"]
         self.class_id = config["data"]["class_id"]
@@ -29,8 +31,25 @@ class ShapeNetDataset(Dataset):
         voxel_class_path = os.path.join(self.voxel_path, self.class_id)
 
         model_ids = os.listdir(render_class_path)
+        model_ids = [m for m in model_ids if os.path.exists(os.path.join(voxel_class_path, m))]
 
-        for model_id in model_ids:
+        random.seed(42)
+        random.shuffle(model_ids)
+
+        n = len(model_ids)
+
+        train_ids = model_ids[:int(0.8 * n)]
+        val_ids = model_ids[int(0.8 * n):int(0.9 * n)]
+        test_ids = model_ids[int(0.9 * n):]
+
+        if self.split == "train":
+            selected_ids = train_ids
+        elif self.split == "val":
+            selected_ids = val_ids
+        else:
+            selected_ids = test_ids
+
+        for model_id in selected_ids:
             render_dir = os.path.join(render_class_path, model_id, "rendering")
             voxel_file = os.path.join(voxel_class_path, model_id, "model.binvox")
 
@@ -48,7 +67,7 @@ class ShapeNetDataset(Dataset):
 
             self.samples.append((image_paths, voxel_file))
 
-        print(f"Loaded {len(self.samples)} objects")
+        print(f"{self.split} samples: {len(self.samples)}")
 
     def __len__(self):
         return len(self.samples)

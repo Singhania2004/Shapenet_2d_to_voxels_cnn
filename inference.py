@@ -19,7 +19,7 @@ def main():
     model.eval()
 
     # 🔥 Use REAL image from ShapeNet
-    image_path = "src/data/ShapeNetRendering/ShapeNetRendering/03001627/1eab4c4c55b8a0f48162e1d15342e13b/rendering/16.png"
+    image_path = "src/data/ShapeNetRendering/ShapeNetRendering/03001627/d7db1353551d341f149c35efde9de588/rendering/18.png"
 
     transform = transforms.Compose([
         transforms.Resize((128, 128)),
