@@ -9,13 +9,10 @@ class Encoder(nn.Module):
 
         resnet = models.resnet18(pretrained=True)
 
-        # Remove final classification layer
-        self.feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
-
-        self.fc = nn.Linear(512, latent_dim)
+        # Remove AdaptiveAvgPool2d and fully connected layer to preserve spatial dimensions
+        # children()[-2] is layer4, outputting [B, 512, 4, 4]
+        self.feature_extractor = nn.Sequential(*list(resnet.children())[:-2])
 
     def forward(self, x):
-        x = self.feature_extractor(x)   # [B, 512, 1, 1]
-        x = torch.flatten(x, 1)      # [B, 512]
-        x = self.fc(x)                  # [B, latent_dim]
+        x = self.feature_extractor(x)   # [B, 512, 4, 4] (for 128x128 input)
         return x

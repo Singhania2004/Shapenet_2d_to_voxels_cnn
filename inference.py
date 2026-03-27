@@ -24,13 +24,17 @@ def main():
     transform = transforms.Compose([
         transforms.Resize((128, 128)),
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     image = Image.open(image_path).convert("RGB")   
     image = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        voxel = model(image).cpu().numpy()
+        logits = model(image)
+        voxel_probs = torch.sigmoid(logits)
+        # Threshold at 0.5 to create binary voxel grid
+        voxel = (voxel_probs > 0.5).float().cpu().numpy()
 
     mesh = voxel_to_mesh(voxel)
 

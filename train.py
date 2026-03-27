@@ -21,6 +21,17 @@ def compute_iou(pred, target, threshold=0.5):
     return iou.item()
 
 
+def focal_loss(pred, target, alpha=0.8, gamma=2.0):
+    bce = nn.functional.binary_cross_entropy_with_logits(pred, target, reduction='none')
+    pred_sigmoid = torch.sigmoid(pred)
+    
+    p_t = pred_sigmoid * target + (1 - pred_sigmoid) * (1 - target)
+    alpha_t = alpha * target + (1 - alpha) * (1 - target)
+    
+    loss = alpha_t * (1.0 - p_t) ** gamma * bce
+    return loss.mean()
+
+
 def dice_loss(pred, target, smooth=1.0):
     pred = torch.sigmoid(pred)
     pred = pred.contiguous().view(pred.size(0), -1)
@@ -54,11 +65,12 @@ def main():
     for param in model.encoder.parameters():
         param.requires_grad = False
 
-    # bce = nn.BCELoss()
-    pos_weight = torch.tensor([3.0]).to(device)
-    bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    # Removed BCEWithLogitsLoss logic as we are using FocalLoss now
+    # pos_weight = torch.tensor([3.0]).to(device)
+    # bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"])
+    scheduler = None
 
     model.train()
 
@@ -77,6 +89,10 @@ def main():
                 model.parameters(),
                 lr=config["training"]["lr"] * 0.1
             )
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, 
+                T_max=config["training"]["epochs"] - freeze_epochs
+            )
 
             model.train()
 
@@ -89,7 +105,7 @@ def main():
 
             preds = model(images)
 
-            loss = 0.5 * bce(preds, voxels) + 0.5 * dice_loss(preds, voxels)
+            loss = 0.5 * focal_loss(preds, voxels) + 0.5 * dice_loss(preds, voxels)
 
             optimizer.zero_grad()
             loss.backward()
@@ -102,6 +118,10 @@ def main():
             loop.set_postfix(loss=loss.item(), iou=iou)
 
         epoch_iou /= len(train_loader)
+        
+        if scheduler is not None:
+            scheduler.step()
+            
         print(f"Train IoU: {epoch_iou:.4f}")
 
         # ================= VALIDATION =================
