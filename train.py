@@ -6,18 +6,19 @@ from src.utils.config import load_config
 from src.data.dataloader import get_dataloader
 from src.models.model import ReconstructionModel
 
-# ✅ NEW IoU FUNCTION
-def compute_iou(pred, target, threshold=0.5 ):
+
+# ✅ IoU with better threshold
+def compute_iou(pred, target, threshold=0.4):
     pred = torch.sigmoid(pred)
     pred = (pred > threshold).float()
 
-    # Summing over all dimensions except batch (D, H, W, C)
     intersection = (pred * target).sum(dim=(1, 2, 3, 4))
     union = ((pred + target) > 0).float().sum(dim=(1, 2, 3, 4))
 
     return (intersection / (union + 1e-6)).mean().item()
 
-# ✅ NEW DICE LOSS
+
+# ✅ Dice Loss
 def dice_loss(pred, target, smooth=1):
     pred = torch.sigmoid(pred)
 
@@ -26,6 +27,19 @@ def dice_loss(pred, target, smooth=1):
 
     dice = (2. * intersection + smooth) / (union + smooth)
     return 1 - dice.mean()
+
+
+# ✅ NEW: Focal Loss
+def focal_loss(pred, target, alpha=0.25, gamma=2.0):
+    pred = torch.sigmoid(pred)
+    bce = -(target * torch.log(pred + 1e-6) +
+            (1 - target) * torch.log(1 - pred + 1e-6))
+
+    pt = torch.where(target == 1, pred, 1 - pred)
+    loss = alpha * (1 - pt) ** gamma * bce
+
+    return loss.mean()
+
 
 def main():
     freeze_epochs = 5
@@ -38,24 +52,22 @@ def main():
     )
     print(f"Using device: {device}")
 
-    # ✅ Loaders
     train_loader = get_dataloader(config, "train")
     val_loader = get_dataloader(config, "val")
 
     model = ReconstructionModel(config).to(device)
 
-    # ❄️ Freeze encoder initially
     for param in model.encoder.parameters():
         param.requires_grad = False
 
-    # ✅ NEW LOSS INITIALIZATION
-    # Increased pos_weight to 5.0 as requested
     bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5.0]).to(device))
 
+    # 🔥 UPDATED LOSS
     def compute_loss(pred, target):
         bce = bce_loss_fn(pred, target)
         dice = dice_loss(pred, target)
-        return bce + 0.5 * dice
+        focal = focal_loss(pred, target)
+        return bce + 0.5 * dice + 0.5 * focal
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"])
 
@@ -63,7 +75,6 @@ def main():
         model.train()
         epoch_iou = 0
 
-        # 🔥 Unfreeze encoder
         if epoch == freeze_epochs:
             print("🔥 Unfreezing encoder...")
             for param in model.encoder.parameters():
@@ -76,14 +87,12 @@ def main():
 
         loop = tqdm(train_loader)
 
-        # ================= TRAIN =================
         for images, voxels in loop:
             images = images.to(device)
             voxels = voxels.to(device)
 
             preds = model(images)
 
-            # ✅ Using the new composite loss
             loss = compute_loss(preds, voxels)
 
             optimizer.zero_grad()
@@ -99,7 +108,6 @@ def main():
         epoch_iou /= len(train_loader)
         print(f"Train IoU: {epoch_iou:.4f}")
 
-        # ================= VALIDATION =================
         model.eval()
         val_iou = 0
 
@@ -116,13 +124,13 @@ def main():
         val_iou /= len(val_loader)
         print(f"Validation IoU: {val_iou:.4f}")
 
-        # ✅ Save BEST model based on VAL
         if val_iou > best_val_iou:
             best_val_iou = val_iou
             torch.save(model.state_dict(), "outputs/model_best.pth")
             print("✅ Saved best model")
 
     torch.save(model.state_dict(), "outputs/model_final.pth")
+
 
 if __name__ == "__main__":
     main()

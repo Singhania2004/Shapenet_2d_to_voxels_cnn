@@ -2,7 +2,6 @@ import os
 import random
 import torch
 import numpy as np
-import random
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
@@ -19,10 +18,23 @@ class ShapeNetDataset(Dataset):
 
         self.samples = []
 
-        self.transform = transforms.Compose([
-            transforms.Resize((config["data"]["image_size"], config["data"]["image_size"])),
-            transforms.ToTensor(),
-        ])
+        # 🔥 NEW: Augmentation + normalization
+        if split == "train":
+            self.transform = transforms.Compose([
+                transforms.Resize((config["data"]["image_size"], config["data"]["image_size"])),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ])
+        else:
+            self.transform = transforms.Compose([
+                transforms.Resize((config["data"]["image_size"], config["data"]["image_size"])),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ])
 
         self._build_index()
 
@@ -75,17 +87,14 @@ class ShapeNetDataset(Dataset):
     def __getitem__(self, idx):
         image_paths, voxel_path = self.samples[idx]
 
-        # 🔥 Random view selection
         img_path = random.choice(image_paths)
-
         image = Image.open(img_path).convert("RGB")
         image = self.transform(image)
 
-        # Load voxel
         with open(voxel_path, 'rb') as f:
             voxel = binvox_rw.read_as_3d_array(f).data.astype(np.float32)
 
-        voxel = np.expand_dims(voxel, axis=0)  # [1,32,32,32]
+        voxel = np.expand_dims(voxel, axis=0)
         voxel = torch.tensor(voxel)
 
         return image, voxel
