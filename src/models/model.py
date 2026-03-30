@@ -7,13 +7,10 @@ class ReconstructionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        latent_dim = config["model"]["latent_dim"]
-        voxel_size = config["data"]["voxel_size"]
-
-        self.encoder = Encoder(latent_dim)
-        self.decoder = Decoder(latent_dim, voxel_size)
+        self.encoder = Encoder()
+        self.decoder = Decoder()
 
     def forward(self, x):
-        latent = self.encoder(x)
-        voxel = self.decoder(latent)
+        f1, f2, f3, f4 = self.encoder(x)
+        voxel = self.decoder(f1, f2, f3, f4)
         return voxel

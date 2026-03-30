@@ -42,7 +42,6 @@ def focal_loss(pred, target, alpha=0.25, gamma=2.0):
 
 
 def main():
-    freeze_epochs = 5
     best_val_iou = 0
 
     config = load_config("configs/config.yaml")
@@ -56,9 +55,6 @@ def main():
     val_loader = get_dataloader(config, "val")
 
     model = ReconstructionModel(config).to(device)
-
-    for param in model.encoder.parameters():
-        param.requires_grad = False
 
     bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5.0]).to(device))
 
@@ -74,16 +70,6 @@ def main():
     for epoch in range(config["training"]["epochs"]):
         model.train()
         epoch_iou = 0
-
-        if epoch == freeze_epochs:
-            print("🔥 Unfreezing encoder...")
-            for param in model.encoder.parameters():
-                param.requires_grad = True
-
-            optimizer = torch.optim.Adam(
-                model.parameters(),
-                lr=config["training"]["lr"] * 0.1
-            )
 
         loop = tqdm(train_loader)
 

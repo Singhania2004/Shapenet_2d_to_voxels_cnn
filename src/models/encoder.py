@@ -4,24 +4,29 @@ import torchvision.models as models
 
 
 class Encoder(nn.Module):
-    def __init__(self, latent_dim=1024):
+    def __init__(self):
         super().__init__()
 
         resnet = models.resnet34(pretrained=True)
 
-        # Remove avgpool + fc
-        self.features = nn.Sequential(*list(resnet.children())[:-2])
-        # Output: [B, 512, 4, 4]
+        # Break into stages
+        self.layer0 = nn.Sequential(
+            resnet.conv1,
+            resnet.bn1,
+            resnet.relu,
+            resnet.maxpool
+        )  # 64, 32x32
 
-        self.conv = nn.Conv2d(512, 256, kernel_size=1)
-
-        self.fc = nn.Linear(256 * 4 * 4, latent_dim)
+        self.layer1 = resnet.layer1  # 64, 32x32
+        self.layer2 = resnet.layer2  # 128, 16x16
+        self.layer3 = resnet.layer3  # 256, 8x8
+        self.layer4 = resnet.layer4  # 512, 4x4
 
     def forward(self, x):
-        x = self.features(x)         # [B, 512, 4, 4]
-        x = self.conv(x)             # [B, 256, 4, 4]
+        f0 = self.layer0(x)
+        f1 = self.layer1(f0)
+        f2 = self.layer2(f1)
+        f3 = self.layer3(f2)
+        f4 = self.layer4(f3)
 
-        x = x.view(x.size(0), -1)    # flatten
-        x = self.fc(x)               # [B, latent_dim]
-
-        return x
+        return f1, f2, f3, f4
