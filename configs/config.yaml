@@ -4,13 +4,12 @@ data:
   batch_size: 4
   num_workers: 2
   class_id: "03001627"
-  num_views: 3   # Encoder will average exactly K=3 views per training step
 
 model:
-  # latent_dim removed — using spatial [B, 512, 4, 4] and [B, 256, 8, 8]
+  latent_dim: 1024
 
 training:
-  epochs: 20      # Higher epochs needed to learn 3D consistency from 2D views
+  epochs: 20
   lr: 0.0001
   device: "cuda"
 
