@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tqdm import tqdm
 
 from src.utils.config import load_config
@@ -7,7 +8,7 @@ from src.data.dataloader import get_dataloader
 from src.models.model import ReconstructionModel
 
 
-# ✅ IoU with better threshold
+# ✅ IoU (threshold = 0.4)
 def compute_iou(pred, target, threshold=0.4):
     pred = torch.sigmoid(pred)
     pred = (pred > threshold).float()
@@ -29,15 +30,11 @@ def dice_loss(pred, target, smooth=1):
     return 1 - dice.mean()
 
 
-# ✅ NEW: Focal Loss
+# ✅ FIXED Focal Loss (stable)
 def focal_loss(pred, target, alpha=0.25, gamma=2.0):
-    pred = torch.sigmoid(pred)
-    bce = -(target * torch.log(pred + 1e-6) +
-            (1 - target) * torch.log(1 - pred + 1e-6))
-
-    pt = torch.where(target == 1, pred, 1 - pred)
+    bce = F.binary_cross_entropy_with_logits(pred, target, reduction='none')
+    pt = torch.exp(-bce)
     loss = alpha * (1 - pt) ** gamma * bce
-
     return loss.mean()
 
 
@@ -56,16 +53,29 @@ def main():
 
     model = ReconstructionModel(config).to(device)
 
-    bce_loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5.0]).to(device))
+    # Loss
+    bce_loss_fn = nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor([5.0]).to(device)
+    )
 
-    # 🔥 UPDATED LOSS
     def compute_loss(pred, target):
         bce = bce_loss_fn(pred, target)
         dice = dice_loss(pred, target)
         focal = focal_loss(pred, target)
-        return bce + 0.5 * dice + 0.5 * focal
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["training"]["lr"])
+        # 🔥 Balanced loss (important)
+        return bce + 0.5 * dice + 0.2 * focal
+
+    # Optimizer
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config["training"]["lr"]  # recommend 5e-5 in config
+    )
+
+    # 🔥 Scheduler
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=8, gamma=0.5
+    )
 
     for epoch in range(config["training"]["epochs"]):
         model.train()
@@ -79,10 +89,18 @@ def main():
 
             preds = model(images)
 
-            loss = compute_loss(preds, voxels)
+            # 🔥 Warm-up (first 2 epochs → only BCE)
+            if epoch < 2:
+                loss = bce_loss_fn(preds, voxels)
+            else:
+                loss = compute_loss(preds, voxels)
 
             optimizer.zero_grad()
             loss.backward()
+
+            # 🔥 Gradient clipping (stability)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
             optimizer.step()
 
             iou = compute_iou(preds, voxels)
@@ -94,6 +112,7 @@ def main():
         epoch_iou /= len(train_loader)
         print(f"Train IoU: {epoch_iou:.4f}")
 
+        # ================= VALIDATION =================
         model.eval()
         val_iou = 0
 
@@ -110,10 +129,14 @@ def main():
         val_iou /= len(val_loader)
         print(f"Validation IoU: {val_iou:.4f}")
 
+        # Save best model
         if val_iou > best_val_iou:
             best_val_iou = val_iou
             torch.save(model.state_dict(), "outputs/model_best.pth")
             print("✅ Saved best model")
+
+        # 🔥 Step scheduler
+        scheduler.step()
 
     torch.save(model.state_dict(), "outputs/model_final.pth")
 

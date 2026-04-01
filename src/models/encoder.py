@@ -4,29 +4,28 @@ import torchvision.models as models
 
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, latent_dim=1024):
         super().__init__()
 
         resnet = models.resnet34(pretrained=True)
 
-        # Break into stages
-        self.layer0 = nn.Sequential(
-            resnet.conv1,
-            resnet.bn1,
-            resnet.relu,
-            resnet.maxpool
-        )  # 64, 32x32
+        self.features = nn.Sequential(*list(resnet.children())[:-2])
+        self.pool = nn.AdaptiveAvgPool2d((1,1))
+        self.fc = nn.Linear(512, latent_dim)
 
-        self.layer1 = resnet.layer1  # 64, 32x32
-        self.layer2 = resnet.layer2  # 128, 16x16
-        self.layer3 = resnet.layer3  # 256, 8x8
-        self.layer4 = resnet.layer4  # 512, 4x4
+        self.layer1 = resnet.layer1
+        self.layer2 = resnet.layer2
+        self.layer3 = resnet.layer3
+        self.layer4 = resnet.layer4
 
     def forward(self, x):
-        f0 = self.layer0(x)
-        f1 = self.layer1(f0)
+        x = self.features[0:4](x)
+        f1 = self.layer1(x)
         f2 = self.layer2(f1)
         f3 = self.layer3(f2)
         f4 = self.layer4(f3)
 
-        return f1, f2, f3, f4
+        pooled = self.pool(f4).view(x.size(0), -1)
+        latent = self.fc(pooled)
+
+        return latent, (f1, f2, f3, f4)

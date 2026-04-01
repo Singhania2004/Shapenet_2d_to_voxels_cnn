@@ -10,7 +10,7 @@ model:
 
 training:
   epochs: 20
-  lr: 0.0001
+  lr: 0.00005
   device: "cuda"
 
 paths:
