@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>VoxelLens — 2D → 3D Reconstruction</title>
+<title>VoxelChair — 2D → 3D Reconstruction</title>
 
 <!-- Three.js + OrbitControls -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -101,21 +101,7 @@ header::after {
   text-transform: uppercase;
   margin-top: 1px;
 }
-.status-dot {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 6px var(--success);
-  animation: pulse 2s ease-in-out infinite;
-}
+
 @keyframes pulse {
   0%,100% { opacity: 1; }
   50%      { opacity: 0.4; }
@@ -309,9 +295,6 @@ input[type=range]::-webkit-slider-thumb {
   margin-top: 4px;
 }
 
-.iou-bar-wrap {
-  margin-top: 14px;
-}
 .iou-row {
   display: flex;
   align-items: center;
@@ -514,12 +497,8 @@ input[type=range]::-webkit-slider-thumb {
 <header>
   <div class="logo-mark">V</div>
   <div class="logo-text">
-    <h1>VoxelLens</h1>
+    <h1>VoxelChair</h1>
     <p>2D Image → 3D Voxel Reconstruction</p>
-  </div>
-  <div class="status-dot">
-    <div class="dot"></div>
-    <span>ResNet34 + Skip-Decoder</span>
   </div>
 </header>
 
@@ -535,7 +514,7 @@ input[type=range]::-webkit-slider-thumb {
         <input type="file" id="file-input" accept="image/*"/>
         <span class="dz-icon">🪑</span>
         <div class="dz-title">Drop image here</div>
-        <div class="dz-sub">PNG / JPG / WEBP · any chair view</div>
+        <div class="dz-sub">PNG / JPG / WEBP · any chair view · <span style="color: var(--accent2)">without background</span></div>
       </div>
       <img id="preview" class="preview-img" alt="preview"/>
     </div>
@@ -596,11 +575,6 @@ input[type=range]::-webkit-slider-thumb {
           <div class="stat-label">Threshold</div>
         </div>
       </div>
-
-      <div class="iou-bar-wrap" id="iou-bars">
-        <div class="section-label" style="margin-top:12px">Occupancy @ Thresholds</div>
-        <!-- filled by JS -->
-      </div>
     </div>
 
   </div>
@@ -619,10 +593,9 @@ input[type=range]::-webkit-slider-thumb {
       <div class="loading-text">Running inference...</div>
     </div>
 
-    <div class="corner-label tl">VoxelLens · 3D View</div>
+    <div class="corner-label tl">VoxelChair · 3D View</div>
     <div class="corner-label tr" id="vox-count-label">— voxels</div>
     <div class="corner-label bl">Drag to rotate · Scroll to zoom</div>
-    <div class="corner-label br">ResNet34 Encoder + Skip Decoder</div>
     <div class="crosshair"></div>
 
     <div class="viewer-toolbar">
@@ -894,18 +867,6 @@ runBtn.addEventListener('click', async () => {
       ((data.num_occupied / data.total_voxels) * 100).toFixed(1);
     document.getElementById('s-grid').textContent    = `${data.grid_size}³`;
     document.getElementById('s-thresh').textContent  = data.threshold.toFixed(2);
-
-    // IoU bars
-    const barContainer = document.getElementById('iou-bars');
-    barContainer.innerHTML = '<div class="section-label" style="margin-top:12px;margin-bottom:8px">Occupancy @ Thresholds</div>';
-    Object.entries(data.iou_stats).forEach(([t, val]) => {
-      barContainer.innerHTML += `
-        <div class="iou-row">
-          <div class="iou-lbl">τ = ${t}</div>
-          <div class="iou-track"><div class="iou-fill" style="width:${(val*100).toFixed(1)}%"></div></div>
-          <div class="iou-num">${(val*100).toFixed(1)}%</div>
-        </div>`;
-    });
 
     controls.autoRotate = true;
   } catch (err) {

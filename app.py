@@ -104,19 +104,12 @@ def predict():
     num_occupied = int((prob_vol > threshold).sum())
     total_voxels = int(prob_vol.size)
 
-    # IoU at multiple thresholds (relative, for UI display)
-    iou_stats = {}
-    for t in [0.3, 0.4, 0.5]:
-        binary = (prob_vol > t)
-        iou_stats[str(t)] = round(float(binary.sum()) / total_voxels, 4)
-
     payload = {
         "voxels": occupied.tolist(),          # list of [x,y,z] triples
         "grid_size": int(prob_vol.shape[0]),
         "num_occupied": num_occupied,
         "total_voxels": total_voxels,
         "threshold": threshold,
-        "iou_stats": iou_stats,
         "image_b64": img_b64,
     }
 
