@@ -9,7 +9,7 @@ model:
   latent_dim: 1024
 
 training:
-  epochs: 20
+  epochs: 25
   lr: 0.00005
   device: "cuda"
 

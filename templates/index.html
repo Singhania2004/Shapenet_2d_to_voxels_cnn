@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>VoxelLens — 2D → 3D Reconstruction</title>
+
+<!-- Three.js + OrbitControls -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+/* ── Design: dark industrial / blueprint aesthetic ──────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+:root {
+  --bg:         #0a0c10;
+  --surface:    #111318;
+  --panel:      #161a22;
+  --border:     #1f2633;
+  --accent:     #3b82f6;
+  --accent2:    #60efff;
+  --warn:       #f59e0b;
+  --success:    #34d399;
+  --text:       #e2e8f0;
+  --muted:      #64748b;
+  --voxel:      #3b82f6;
+  --grid-line:  rgba(59,130,246,0.08);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* scanline texture overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.15) 2px,
+    rgba(0,0,0,0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.4;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 18px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface);
+  position: relative;
+}
+header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+.logo-mark {
+  width: 38px; height: 38px;
+  border: 2px solid var(--accent);
+  display: grid; place-items: center;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--accent);
+  position: relative;
+}
+.logo-mark::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: var(--accent);
+  opacity: 0.15;
+}
+.logo-text h1 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  color: #fff;
+}
+.logo-text p {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.status-dot {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: calc(100vh - 73px);
+}
+
+/* ── Left sidebar ─────────────────────────────────────────────────────────── */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.section {
+  border-bottom: 1px solid var(--border);
+  padding: 20px;
+}
+.section-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+/* ── Drop zone ───────────────────────────────────────────────────────────── */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 4px;
+  padding: 28px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+}
+.dropzone:hover,
+.dropzone.drag-over {
+  border-color: var(--accent);
+  background: rgba(59,130,246,0.05);
+}
+.dropzone input[type=file] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+  width: 100%; height: 100%;
+}
+.dz-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  display: block;
+}
+.dz-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.dz-sub {
+  font-size: 10px;
+  color: var(--muted);
+}
+.preview-img {
+  width: 100%;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  display: none;
+  margin-top: 10px;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.control-row label {
+  font-size: 11px;
+  color: var(--muted);
+}
+.control-row .val {
+  font-size: 12px;
+  color: var(--accent2);
+  min-width: 40px;
+  text-align: right;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+
+.color-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.color-btn {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.color-btn.active,
+.color-btn:hover { border-color: #fff; }
+
+/* ── Run button ──────────────────────────────────────────────────────────── */
+.run-btn {
+  width: 100%;
+  padding: 13px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  position: relative;
+  overflow: hidden;
+}
+.run-btn:hover {
+  background: #2563eb;
+  box-shadow: 0 0 20px rgba(59,130,246,0.5);
+}
+.run-btn:active { transform: scale(0.98); }
+.run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* loading shimmer on button */
+.run-btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer { to { left: 100%; } }
+
+/* ── Stats ───────────────────────────────────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 12px;
+}
+.stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent2);
+  line-height: 1;
+}
+.stat-label {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.iou-bar-wrap {
+  margin-top: 14px;
+}
+.iou-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.iou-lbl {
+  font-size: 10px;
+  color: var(--muted);
+  width: 38px;
+  flex-shrink: 0;
+}
+.iou-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.iou-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 3px;
+  transition: width .5s cubic-bezier(0.4,0,0.2,1);
+  width: 0;
+}
+.iou-num {
+  font-size: 10px;
+  color: var(--accent2);
+  width: 40px;
+  text-align: right;
+}
+
+/* ── Main viewer ─────────────────────────────────────────────────────────── */
+.viewer-wrap {
+  position: relative;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* grid blueprint overlay on canvas */
+.viewer-wrap::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#three-canvas {
+  width: 100%; height: 100%;
+  display: block;
+  position: relative;
+  z-index: 2;
+}
+
+/* corner labels */
+.corner-label {
+  position: absolute;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  z-index: 5;
+  pointer-events: none;
+}
+.corner-label.tl { top: 14px; left: 16px; }
+.corner-label.tr { top: 14px; right: 16px; text-align: right; }
+.corner-label.bl { bottom: 14px; left: 16px; }
+.corner-label.br { bottom: 14px; right: 16px; text-align: right; }
+
+/* crosshair in center */
+.crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px; height: 20px;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0.3;
+}
+.crosshair::before, .crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--accent);
+}
+.crosshair::before { width: 1px; height: 100%; left: 50%; top: 0; }
+.crosshair::after  { width: 100%; height: 1px; top: 50%; left: 0; }
+
+/* empty state */
+.empty-state {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.empty-state.hidden { display: none; }
+.empty-icon {
+  font-size: 64px;
+  opacity: 0.15;
+  margin-bottom: 16px;
+  animation: float 4s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.empty-text {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* loading overlay */
+.loading-overlay {
+  position: absolute; inset: 0;
+  background: rgba(10,12,16,0.85);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 10;
+  display: none;
+}
+.loading-overlay.visible { display: flex; }
+.spinner {
+  width: 48px; height: 48px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+/* toolbar */
+.viewer-toolbar {
+  position: absolute;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  background: rgba(17,19,24,0.9);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px;
+  z-index: 5;
+}
+.tool-btn {
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all .15s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.tool-btn:hover,
+.tool-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* error toast */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: #7f1d1d;
+  border: 1px solid #dc2626;
+  color: #fca5a5;
+  font-size: 12px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  max-width: 320px;
+  z-index: 9999;
+  display: none;
+  animation: slideIn .2s ease;
+}
+.toast.visible { display: block; }
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">V</div>
+  <div class="logo-text">
+    <h1>VoxelLens</h1>
+    <p>2D Image → 3D Voxel Reconstruction</p>
+  </div>
+  <div class="status-dot">
+    <div class="dot"></div>
+    <span>ResNet34 + Skip-Decoder</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <div class="sidebar">
+
+    <!-- Upload -->
+    <div class="section">
+      <div class="section-label">Input Image</div>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept="image/*"/>
+        <span class="dz-icon">🪑</span>
+        <div class="dz-title">Drop image here</div>
+        <div class="dz-sub">PNG / JPG / WEBP · any chair view</div>
+      </div>
+      <img id="preview" class="preview-img" alt="preview"/>
+    </div>
+
+    <!-- Controls -->
+    <div class="section">
+      <div class="section-label">Inference Controls</div>
+
+      <div class="control-row">
+        <label>Threshold</label>
+        <span class="val" id="thresh-val">0.40</span>
+      </div>
+      <input type="range" id="thresh" min="0.1" max="0.9" step="0.01" value="0.4"/>
+
+      <div class="control-row">
+        <label>Voxel Size</label>
+        <span class="val" id="vsize-val">0.85</span>
+      </div>
+      <input type="range" id="vsize" min="0.4" max="1.0" step="0.05" value="0.85"/>
+
+      <div class="control-row">
+        <label>Voxel Colour</label>
+      </div>
+      <div class="color-row" id="color-row">
+        <div class="color-btn active" data-color="#3b82f6" style="background:#3b82f6"></div>
+        <div class="color-btn" data-color="#60efff" style="background:#60efff"></div>
+        <div class="color-btn" data-color="#34d399" style="background:#34d399"></div>
+        <div class="color-btn" data-color="#f59e0b" style="background:#f59e0b"></div>
+        <div class="color-btn" data-color="#f87171" style="background:#f87171"></div>
+        <div class="color-btn" data-color="#c084fc" style="background:#c084fc"></div>
+        <div class="color-btn" data-color="#ffffff" style="background:#ffffff"></div>
+      </div>
+    </div>
+
+    <!-- Run -->
+    <div class="section">
+      <button class="run-btn" id="run-btn" disabled>▶ Reconstruct</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="section" id="stats-section" style="display:none">
+      <div class="section-label">Voxel Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-val" id="s-occupied">—</div>
+          <div class="stat-label">Occupied</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="s-density">—</div>
+          <div class="stat-label">Density %</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="s-grid">32³</div>
+          <div class="stat-label">Grid Size</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="s-thresh">—</div>
+          <div class="stat-label">Threshold</div>
+        </div>
+      </div>
+
+      <div class="iou-bar-wrap" id="iou-bars">
+        <div class="section-label" style="margin-top:12px">Occupancy @ Thresholds</div>
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Main 3-D Viewer ──────────────────────────────────────────────────── -->
+  <div class="viewer-wrap" id="viewer-wrap">
+    <canvas id="three-canvas"></canvas>
+
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📦</div>
+      <div class="empty-text">Upload an image and hit Reconstruct</div>
+    </div>
+
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Running inference...</div>
+    </div>
+
+    <div class="corner-label tl">VoxelLens · 3D View</div>
+    <div class="corner-label tr" id="vox-count-label">— voxels</div>
+    <div class="corner-label bl">Drag to rotate · Scroll to zoom</div>
+    <div class="corner-label br">ResNet34 Encoder + Skip Decoder</div>
+    <div class="crosshair"></div>
+
+    <div class="viewer-toolbar">
+      <button class="tool-btn active" id="btn-solid">Solid</button>
+      <button class="tool-btn" id="btn-wire">Wireframe</button>
+      <button class="tool-btn" id="btn-reset">Reset Camera</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ── Three.js scene ──────────────────────────────────────────────────────── -->
+<script>
+// ── Three.js setup ────────────────────────────────────────────────────────
+const canvas  = document.getElementById('three-canvas');
+const wrap    = document.getElementById('viewer-wrap');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x000000, 0);
+renderer.shadowMap.enabled = true;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+camera.position.set(55, 45, 55);
+
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate    = true;
+controls.autoRotateSpeed = 1.2;
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(60, 80, 60);
+scene.add(dirLight);
+
+const pointLight = new THREE.PointLight(0x3b82f6, 0.6, 200);
+pointLight.position.set(-40, 20, -40);
+scene.add(pointLight);
+
+// Axes helper (subtle)
+const axesHelper = new THREE.AxesHelper(20);
+axesHelper.material.opacity = 0.3;
+axesHelper.material.transparent = true;
+scene.add(axesHelper);
+
+// Grid helper
+const gridHelper = new THREE.GridHelper(64, 16, 0x1f2633, 0x1f2633);
+gridHelper.position.y = -1;
+scene.add(gridHelper);
+
+// Voxel group
+let voxelGroup = null;
+let currentColor = '#3b82f6';
+let wireframeMode = false;
+
+function resize() {
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// ── Build voxel mesh ──────────────────────────────────────────────────────
+function buildVoxels(voxelList, gridSize, voxelSize, color) {
+  if (voxelGroup) scene.remove(voxelGroup);
+
+  voxelGroup = new THREE.Group();
+
+  const half = gridSize / 2;
+  const s    = voxelSize;
+
+  const geo  = new THREE.BoxGeometry(s, s, s);
+
+  // Use instanced mesh for performance
+  const mat = new THREE.MeshPhongMaterial({
+    color: parseInt(color.replace('#',''), 16),
+    emissive: parseInt(color.replace('#',''), 16),
+    emissiveIntensity: 0.08,
+    shininess: 60,
+    wireframe: wireframeMode,
+  });
+
+  const mesh = new THREE.InstancedMesh(geo, mat, voxelList.length);
+
+  const dummy = new THREE.Object3D();
+  voxelList.forEach(([x, y, z], i) => {
+    dummy.position.set(x - half, y - half, z - half);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+
+  // subtle edge lines overlay (not wireframe, just edges on individual voxels)
+  if (!wireframeMode) {
+    const edgeGeo = new THREE.EdgesGeometry(geo);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.25,
+    });
+    const edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, voxelList.length);
+    voxelList.forEach(([x, y, z], i) => {
+      dummy.position.set(x - half, y - half, z - half);
+      dummy.updateMatrix();
+      edgeMesh.setMatrixAt(i, dummy.matrix);
+    });
+    edgeMesh.instanceMatrix.needsUpdate = true;
+    voxelGroup.add(edgeMesh);
+  }
+
+  voxelGroup.add(mesh);
+  scene.add(voxelGroup);
+
+  // update corner count
+  document.getElementById('vox-count-label').textContent =
+    `${voxelList.length.toLocaleString()} voxels`;
+}
+
+// ── UI state ──────────────────────────────────────────────────────────────
+let fileObj     = null;
+let lastResult  = null;
+
+const dropzone  = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const preview   = document.getElementById('preview');
+const runBtn    = document.getElementById('run-btn');
+const threshSlider = document.getElementById('thresh');
+const vsizeSlider  = document.getElementById('vsize');
+const emptyState   = document.getElementById('empty-state');
+const loadingOv    = document.getElementById('loading-overlay');
+const toast        = document.getElementById('toast');
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+// threshold display
+threshSlider.addEventListener('input', () => {
+  document.getElementById('thresh-val').textContent =
+    parseFloat(threshSlider.value).toFixed(2);
+});
+
+vsizeSlider.addEventListener('input', () => {
+  document.getElementById('vsize-val').textContent =
+    parseFloat(vsizeSlider.value).toFixed(2);
+  // live update voxel size if we already have a result
+  if (lastResult) {
+    buildVoxels(
+      lastResult.voxels,
+      lastResult.grid_size,
+      parseFloat(vsizeSlider.value),
+      currentColor
+    );
+  }
+});
+
+// colour picker
+document.getElementById('color-row').addEventListener('click', e => {
+  const btn = e.target.closest('.color-btn');
+  if (!btn) return;
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentColor = btn.dataset.color;
+  if (lastResult) {
+    buildVoxels(
+      lastResult.voxels,
+      lastResult.grid_size,
+      parseFloat(vsizeSlider.value),
+      currentColor
+    );
+  }
+});
+
+// toolbar
+document.getElementById('btn-solid').addEventListener('click', () => {
+  wireframeMode = false;
+  document.getElementById('btn-solid').classList.add('active');
+  document.getElementById('btn-wire').classList.remove('active');
+  if (lastResult) buildVoxels(lastResult.voxels, lastResult.grid_size, parseFloat(vsizeSlider.value), currentColor);
+});
+document.getElementById('btn-wire').addEventListener('click', () => {
+  wireframeMode = true;
+  document.getElementById('btn-wire').classList.add('active');
+  document.getElementById('btn-solid').classList.remove('active');
+  if (lastResult) buildVoxels(lastResult.voxels, lastResult.grid_size, parseFloat(vsizeSlider.value), currentColor);
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  camera.position.set(55, 45, 55);
+  controls.reset();
+});
+
+// file handling
+function handleFile(f) {
+  if (!f || !f.type.startsWith('image/')) {
+    showToast('Please upload a valid image file.');
+    return;
+  }
+  fileObj = f;
+  const url = URL.createObjectURL(f);
+  preview.src = url;
+  preview.style.display = 'block';
+  dropzone.querySelector('.dz-icon').textContent = '✅';
+  dropzone.querySelector('.dz-title').textContent = f.name;
+  dropzone.querySelector('.dz-sub').textContent   = `${(f.size/1024).toFixed(1)} KB`;
+  runBtn.disabled = false;
+}
+
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('drag-over');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+// ── Inference call ─────────────────────────────────────────────────────────
+runBtn.addEventListener('click', async () => {
+  if (!fileObj) return;
+
+  runBtn.disabled = true;
+  runBtn.classList.add('loading');
+  loadingOv.classList.add('visible');
+  emptyState.classList.add('hidden');
+  controls.autoRotate = false;
+
+  const formData = new FormData();
+  formData.append('image', fileObj);
+  formData.append('threshold', threshSlider.value);
+
+  try {
+    const resp = await fetch('/predict', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || resp.statusText);
+    }
+    const data = await resp.json();
+    lastResult = data;
+
+    // Build mesh
+    buildVoxels(data.voxels, data.grid_size, parseFloat(vsizeSlider.value), currentColor);
+
+    // Stats
+    document.getElementById('stats-section').style.display = 'block';
+    document.getElementById('s-occupied').textContent = data.num_occupied.toLocaleString();
+    document.getElementById('s-density').textContent  =
+      ((data.num_occupied / data.total_voxels) * 100).toFixed(1);
+    document.getElementById('s-grid').textContent    = `${data.grid_size}³`;
+    document.getElementById('s-thresh').textContent  = data.threshold.toFixed(2);
+
+    // IoU bars
+    const barContainer = document.getElementById('iou-bars');
+    barContainer.innerHTML = '<div class="section-label" style="margin-top:12px;margin-bottom:8px">Occupancy @ Thresholds</div>';
+    Object.entries(data.iou_stats).forEach(([t, val]) => {
+      barContainer.innerHTML += `
+        <div class="iou-row">
+          <div class="iou-lbl">τ = ${t}</div>
+          <div class="iou-track"><div class="iou-fill" style="width:${(val*100).toFixed(1)}%"></div></div>
+          <div class="iou-num">${(val*100).toFixed(1)}%</div>
+        </div>`;
+    });
+
+    controls.autoRotate = true;
+  } catch (err) {
+    showToast(`Error: ${err.message}`);
+    emptyState.classList.remove('hidden');
+  } finally {
+    loadingOv.classList.remove('visible');
+    runBtn.disabled = false;
+    runBtn.classList.remove('loading');
+  }
+});
+</script>
+</body>
+</html>

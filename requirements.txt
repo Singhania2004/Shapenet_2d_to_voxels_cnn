@@ -5,6 +5,8 @@ tqdm
 pyyaml
 open3d
 trimesh
+flask 
+flask-cors
 scikit-image
 torch 
 torchvision 
