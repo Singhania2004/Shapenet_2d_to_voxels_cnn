@@ -2,13 +2,8 @@ ipykernel
 numpy
 matplotlib
 tqdm
-pyyaml
-open3d
 trimesh
-gdown
-gunicorn
 flask 
-flask-cors
 scikit-image
 torch 
 torchvision 
