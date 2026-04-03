@@ -1,8 +1,10 @@
 venv_shapenet/
 __pycache__/
 *.pyc
-outputs/
-*.pth
+outputs/model_final.pth
+outputs/model_v8.pth
+outputs/output.obj
+# *.pth
 .ipynb_checkpoints/
 src/data/ShapeNetRendering/
 src/data/ShapeNetVox32/
