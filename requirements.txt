@@ -5,6 +5,7 @@ tqdm
 pyyaml
 open3d
 trimesh
+gunicorn
 flask 
 flask-cors
 scikit-image
