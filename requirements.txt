@@ -4,6 +4,7 @@ matplotlib
 tqdm
 trimesh
 flask 
+flask-cors
 scikit-image
 torch 
 torchvision 
