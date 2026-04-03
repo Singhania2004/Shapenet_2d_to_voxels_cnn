@@ -5,6 +5,7 @@ tqdm
 pyyaml
 open3d
 trimesh
+gdown
 gunicorn
 flask 
 flask-cors
