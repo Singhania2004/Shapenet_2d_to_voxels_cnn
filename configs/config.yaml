@@ -1,19 +1,32 @@
 data:
   image_size: 128
   voxel_size: 32
-  batch_size: 4
+  batch_size: 16          # was 4; ~3x more data per epoch now, so a bigger batch is worth it
   num_workers: 2
-  class_id: "03001627"
+  hflip_aug: false         # set false if you want to be strict (see notes)
+  balanced_sampling: false  # true = oversample small classes (cabinet, watercraft)
+
+  # replaces the old single `class_id`
+  classes:
+    - {id: "02691156", name: "airplane"}
+    - {id: "02933112", name: "cabinet"}
+    - {id: "02958343", name: "car"}
+    - {id: "03001627", name: "chair"}
+    - {id: "04256520", name: "sofa"}
+    - {id: "04530566", name: "watercraft"}
 
 model:
   latent_dim: 1024
 
 training:
-  epochs: 25
-  lr: 0.00005
+  epochs: 30
+  lr: 0.0001
   device: "cuda"
+  warmup_epochs: 2        # BCE-only epochs
+  pos_weight: 5.0
+  init_from: null         # e.g. "outputs/model_best_chair.pth" to fine-tune from your chair model
 
 paths:
-  rendering_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetRendering/ShapeNetRendering"
-  voxel_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetVox32"
+  rendering_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetRendering_full/ShapeNetRendering"
+  voxel_dir: "C:/Shivansh/aiml/shapenet/src/data/ShapeNetVox32_full/ShapeNetVox32"
   output_dir: "./outputs"

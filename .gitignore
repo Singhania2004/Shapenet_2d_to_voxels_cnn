@@ -6,4 +6,6 @@ outputs/
 .ipynb_checkpoints/
 src/data/ShapeNetRendering/
 src/data/ShapeNetVox32/
+src/data/ShapeNetRendering_full/
+src/data/ShapeNetVox32_full/
 src/data/ShapeNetRendering.tgz
