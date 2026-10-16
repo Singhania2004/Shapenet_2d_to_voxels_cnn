@@ -1,7 +1,7 @@
 venv_shapenet/
 __pycache__/
 *.pyc
-outputs/
+outputs/output.obj
 *.pth
 .ipynb_checkpoints/
 src/data/ShapeNetRendering/
